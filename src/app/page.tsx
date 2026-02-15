@@ -1,66 +1,147 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
+
+import { useState } from 'react';
+import styles from './page.module.css';
+
+interface CheckResult {
+  score: number;
+  message: string;
+  details: {
+    has_ga4: boolean;
+    has_gtm: boolean;
+    ga4_id: string | null;
+    gtm_id: string | null;
+    is_sgtm: boolean;
+    visited_url: string;
+  };
+}
 
 export default function Home() {
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<CheckResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCheck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url) return;
+
+    setLoading(true);
+    setResult(null);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 429) {
+          setError(data.message || '利用制限に達しました。');
+        } else {
+          setError(data.message || 'エラーが発生しました。もう一度お試しください。');
+        }
+      } else {
+        setResult(data);
+      }
+    } catch (err) {
+      setError('Failed to connect to the server');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className={styles.main}>
+      <div className={styles.container}>
+        <div className={styles.hero}>
+          <h1 className={styles.title}>
+            GA4 check <span className="gradient-text">Pro</span>
+          </h1>
+          <p className={styles.subtitle}>
+            Google Analytics 4 の導入成熟度を瞬時に分析します。
           </p>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className={styles.formContainer}>
+          <form onSubmit={handleCheck} className={styles.form}>
+            <div className={styles.inputWrapper}>
+              <input
+                type="text"
+                className={`${styles.input} glass`}
+                placeholder="ウェブサイトのURLを入力 (例: example.com)"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+              />
+            </div>
+            <button type="submit" className={styles.button} disabled={loading}>
+              {loading ? <div className={styles.loader} /> : '分析する'}
+            </button>
+          </form>
+          {error && (
+            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+              <p style={{ color: 'var(--error)', marginBottom: '1rem' }}>{error}</p>
+              {error.includes('利用制限') && (
+                <a href="https://mareinterno.com/inquiry/" target="_blank" rel="noopener noreferrer" className={styles.contactButton} style={{ marginTop: 0 }}>
+                  詳細を確認したい場合はこちら
+                </a>
+              )}
+            </div>
+          )}
         </div>
-      </main>
-    </div>
+
+        {result && (
+          <div className={`${styles.resultCard} glass`}>
+            <div className={styles.scoreContainer}>
+              <div className={styles.scoreLabel}>成熟度スコア</div>
+              <div className={styles.scoreValue}>
+                {result.score}<span className={styles.scoreMax}>/5</span>
+              </div>
+            </div>
+
+            <h3 className={styles.statusMessage}>{result.message}</h3>
+
+            <div className={styles.detailsGrid}>
+              <div className={styles.detailItem}>
+                <div className={styles.detailLabel}>GA4 直接実装</div>
+                <div className={`${styles.detailValue} ${result.details.has_ga4 ? styles.success : styles.error}`}>
+                  {result.details.has_ga4 ? '検出' : '未検出'}
+                </div>
+                {result.details.ga4_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.ga4_id}</div>}
+              </div>
+
+              <div className={styles.detailItem}>
+                <div className={styles.detailLabel}>GTM コンテナ</div>
+                <div className={`${styles.detailValue} ${result.details.has_gtm ? styles.success : styles.error}`}>
+                  {result.details.has_gtm ? '検出' : '未検出'}
+                </div>
+                {result.details.gtm_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.gtm_id}</div>}
+              </div>
+
+              <div className={styles.detailItem}>
+                <div className={styles.detailLabel}>サーバーサイド / 高度な実装</div>
+                <div className={`${styles.detailValue} ${result.details.is_sgtm ? styles.warning : styles.error}`} style={result.details.is_sgtm ? { color: 'var(--warning)' } : {}}>
+                  {result.details.is_sgtm ? '可能性あり (Proxy/sGTM)' : '未検出'}
+                </div>
+              </div>
+            </div>
+
+            <a href="https://mareinterno.com/inquiry/" target="_blank" rel="noopener noreferrer" className={styles.contactButton}>
+              詳細を確認したい場合はこちら
+            </a>
+          </div>
+        )}
+      </div>
+
+      <footer className={styles.footer}>
+        <p>
+          &copy; {new Date().getFullYear()} <a href="https://mareinterno.com" target="_blank" rel="noopener noreferrer">mare interno LLC.</a>
+        </p>
+      </footer>
+    </main>
   );
 }
