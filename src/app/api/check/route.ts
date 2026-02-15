@@ -31,11 +31,19 @@ export async function POST(request: Request) {
         try {
             if (process.env.GOOGLE_SHEETS_CLIENT_EMAIL && process.env.GOOGLE_SHEETS_PRIVATE_KEY && process.env.GOOGLE_SHEET_ID) {
                 const { google } = require('googleapis');
+                // Robust Private Key Handling for Vercel/Environments
+                let privateKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY || '';
+                // Remove potential quotes wrapped around the key
+                if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+                    privateKey = privateKey.substring(1, privateKey.length - 1);
+                }
+                // Handle both literal newlines and escaped \n
+                privateKey = privateKey.replace(/\\n/g, '\n');
+
                 const auth = new google.auth.GoogleAuth({
                     credentials: {
                         client_email: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
-                        // Ensure newlines are correctly interpreted. 
-                        private_key: (process.env.GOOGLE_SHEETS_PRIVATE_KEY || '').split(String.raw`\n`).join('\n'),
+                        private_key: privateKey,
                     },
                     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
                 });
@@ -229,12 +237,17 @@ export async function POST(request: Request) {
                 if (process.env.GOOGLE_SHEETS_CLIENT_EMAIL && process.env.GOOGLE_SHEETS_PRIVATE_KEY && process.env.GOOGLE_SHEET_ID) {
                     const { google } = require('googleapis');
 
+                    // Robust Private Key Handling for Vercel/Environments
+                    let privateKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY || '';
+                    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+                        privateKey = privateKey.substring(1, privateKey.length - 1);
+                    }
+                    privateKey = privateKey.replace(/\\n/g, '\n');
+
                     const auth = new google.auth.GoogleAuth({
                         credentials: {
                             client_email: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
-                            // Ensure newlines are correctly interpreted. 
-                            // In .env, \n is often literal text "\\n". We need to replace it with real newline "\n".
-                            private_key: (process.env.GOOGLE_SHEETS_PRIVATE_KEY || '').split(String.raw`\n`).join('\n'),
+                            private_key: privateKey,
                         },
                         scopes: ['https://www.googleapis.com/auth/spreadsheets'],
                     });
@@ -258,7 +271,11 @@ export async function POST(request: Request) {
                     });
                 }
             } catch (logError: any) {
-                console.error('Failed to log to Google Sheets:', logError.message, logError.response?.data);
+                console.error('Google Sheets Logging Error:', {
+                    message: logError.message,
+                    code: logError.code,
+                    details: logError.response?.data
+                });
                 // Do not fail the request if logging fails
             }
             // --------------------------------
