@@ -92,6 +92,9 @@ export default function Home() {
               )}
             </div>
           )}
+          <p className={styles.formDisclaimer}>
+            入力されたURLは診断精度向上および弊社サービス改善の分析（重複判定等）にのみ利用し、第三者へ公開することはありません。
+          </p>
         </div>
 
         {result && (
@@ -130,9 +133,19 @@ export default function Home() {
               </div>
             </div>
 
+            {result.score === 3 && (
+              <p className={styles.itpDisclaimer}>
+                ※表示される欠損率はSafari（ITP）等のブラウザ制約による一般的な推定値です。正確な影響範囲の特定には管理画面の診断が必要です。
+              </p>
+            )}
+
             <a href="https://mareinterno.com/inquiry/" target="_blank" rel="noopener noreferrer" className={styles.contactButton}>
               詳細を確認したい場合はこちら
             </a>
+
+            <p className={styles.resultDisclaimer}>
+              本診断は公開タグの検知に基づく簡易的なものです。サイト構造や設定により、実際の導入状況と異なる判定が出る場合があります。
+            </p>
           </div>
         )}
       </div>

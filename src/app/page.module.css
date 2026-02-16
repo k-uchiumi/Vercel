@@ -293,3 +293,32 @@
   color: white;
   text-decoration: underline;
 }
+
+.formDisclaimer {
+  font-size: 0.8rem;
+  color: #71717a;
+  margin-top: 1.5rem;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.resultDisclaimer {
+  font-size: 0.8rem;
+  color: #71717a;
+  margin-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1.5rem;
+  line-height: 1.5;
+}
+
+.itpDisclaimer {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  margin: 1.5rem 0;
+  text-align: left;
+  line-height: 1.6;
+}
