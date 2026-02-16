@@ -16,11 +16,29 @@ interface CheckResult {
   };
 }
 
+declare global {
+  interface Window {
+    zaraz?: {
+      track: (eventName: string, data?: object) => void;
+    };
+  }
+}
+
 export default function Home() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [zarazTriggered, setZarazTriggered] = useState(false);
+
+  const handleInput = () => {
+    if (!zarazTriggered && url.length === 0) {
+      if (typeof window !== 'undefined' && window.zaraz) {
+        window.zaraz.track("input_started", { field_id: "target_url" });
+        setZarazTriggered(true);
+      }
+    }
+  };
 
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +94,7 @@ export default function Home() {
                 placeholder="ウェブサイトのURLを入力 (例: example.com)"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
+                onInput={handleInput}
               />
             </div>
             <button type="submit" className={styles.button} disabled={loading}>
