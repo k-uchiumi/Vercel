@@ -7,10 +7,13 @@ interface CheckResult {
   score: number;
   message: string;
   details: {
-    has_ga4: boolean;
+    has_ga4_direct: boolean;
+    has_ga4_gtm: boolean;
     has_gtm: boolean;
+    has_ua: boolean;
     ga4_id: string | null;
     gtm_id: string | null;
+    ua_id: string | null;
     is_sgtm: boolean;
     visited_url: string;
   };
@@ -104,7 +107,7 @@ export default function Home() {
           {error && (
             <div style={{ textAlign: 'center', marginTop: '1rem' }}>
               <p style={{ color: 'var(--error)', marginBottom: '1rem' }}>{error}</p>
-              {error.includes('利用制限') && (
+              {(error.includes('利用制限') || error.includes('計測対象外')) && (
                 <a href="https://mareinterno.com/inquiry/" target="_blank" rel="noopener noreferrer" className={styles.contactButton} style={{ marginTop: 0 }}>
                   詳細を確認したい場合はこちら
                 </a>
@@ -130,10 +133,10 @@ export default function Home() {
             <div className={styles.detailsGrid}>
               <div className={styles.detailItem}>
                 <div className={styles.detailLabel}>GA4 直接実装</div>
-                <div className={`${styles.detailValue} ${result.details.has_ga4 ? styles.success : styles.error}`}>
-                  {result.details.has_ga4 ? '検出' : '未検出'}
+                <div className={`${styles.detailValue} ${result.details.has_ga4_direct ? styles.success : styles.error}`}>
+                  {result.details.has_ga4_direct ? '検出' : '未検出'}
                 </div>
-                {result.details.ga4_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.ga4_id}</div>}
+                {result.details.has_ga4_direct && result.details.ga4_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.ga4_id}</div>}
               </div>
 
               <div className={styles.detailItem}>
@@ -142,6 +145,7 @@ export default function Home() {
                   {result.details.has_gtm ? '検出' : '未検出'}
                 </div>
                 {result.details.gtm_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.gtm_id}</div>}
+                {result.details.has_ga4_gtm && <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>GA4タグ内蔵</div>}
               </div>
 
               <div className={styles.detailItem}>
@@ -149,6 +153,14 @@ export default function Home() {
                 <div className={`${styles.detailValue} ${result.details.is_sgtm ? styles.warning : styles.error}`} style={result.details.is_sgtm ? { color: 'var(--warning)' } : {}}>
                   {result.details.is_sgtm ? '可能性あり (Proxy/sGTM)' : '未検出'}
                 </div>
+              </div>
+
+              <div className={styles.detailItem}>
+                <div className={styles.detailLabel}>UA (旧アナリティクス)</div>
+                <div className={`${styles.detailValue} ${result.details.has_ua ? styles.warning : styles.success}`} style={result.details.has_ua ? { color: 'var(--warning)' } : {}}>
+                  {result.details.has_ua ? '残存' : '未検出'}
+                </div>
+                {result.details.ua_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.ua_id}</div>}
               </div>
             </div>
 
