@@ -190,7 +190,32 @@ export async function POST(request: Request) {
             const ga4IdsFromContainers: string[] = [];
             const uaIdsFromContainers: string[] = [];
 
-            // --- Deep Scan of GTM Container (Score 4 Criteria) ---
+            // --- 1st Party Data Sender (CAPI) Detection ---
+            const capiData = {
+                meta: {
+                    has_event_id: html.includes('event_id') || html.includes('eid'),
+                    has_fbp_fbc: html.includes('_fbp') || html.includes('_fbc'),
+                    is_detected: false
+                },
+                google: {
+                    has_gcl_au: html.includes('_gcl_au'),
+                    has_custom_domain: false,
+                    has_enhanced: html.includes('hashed_email') || html.includes('em'),
+                    is_detected: false
+                },
+                tiktok: {
+                    has_external_id: html.includes('external_id'),
+                    has_event_id: html.includes('tt_pixel_id') && html.includes('event_id'),
+                    is_detected: false
+                },
+                line: {
+                    has_ifa_cl_id: html.includes('ifa') || html.includes('cl_id'),
+                    has_line_id: html.includes('_line_id'),
+                    is_detected: false
+                }
+            };
+
+            // --- Deep Scan of GTM Container ---
             for (const id of uniqueGtmIds) {
                 try {
                     const gtmRes = await fetch(`https://www.googletagmanager.com/gtm.js?id=${id}`, {
@@ -206,6 +231,16 @@ export async function POST(request: Request) {
                         ga4IdsFromContainers.push(...innerGa4);
                         uaIdsFromContainers.push(...innerUa);
 
+                        // CAPI Signals in GTM
+                        if (gtmJs.includes('event_id') || gtmJs.includes('eid')) capiData.meta.has_event_id = true;
+                        if (gtmJs.includes('_fbp') || gtmJs.includes('_fbc')) capiData.meta.has_fbp_fbc = true;
+                        if (gtmJs.includes('_gcl_au')) capiData.google.has_gcl_au = true;
+                        if (gtmJs.includes('hashed_email') || gtmJs.includes('em')) capiData.google.has_enhanced = true;
+                        if (gtmJs.includes('external_id')) capiData.tiktok.has_external_id = true;
+                        if (gtmJs.includes('tt_pixel_id') && gtmJs.includes('event_id')) capiData.tiktok.has_event_id = true;
+                        if (gtmJs.includes('ifa') || gtmJs.includes('cl_id')) capiData.line.has_ifa_cl_id = true;
+                        if (gtmJs.includes('_line_id')) capiData.line.has_line_id = true;
+
                         // Strict same-root-domain signal checking
                         const firstPartyPattern = new RegExp(`[a-zA-Z0-9.-]+\\.${rootDomainEscaped}`, 'i');
                         if (firstPartyPattern.test(gtmJs)) {
@@ -213,13 +248,13 @@ export async function POST(request: Request) {
                             for (const sub of subdomains) {
                                 if (sub !== hostname) {
                                     containerSignalsFound = true;
+                                    capiData.google.has_custom_domain = true;
                                     break;
                                 }
                             }
                         }
 
                         if (gtmJs.includes('server_container_url') || gtmJs.includes('/g/collect')) {
-                            // Check if it's actually configured with a URL, not just a keyword
                             const sGtmValuePattern = new RegExp(`server_container_url["']?\\s*[:,]\\s*["']([^"']+)["']`, 'i');
                             const collectValuePattern = new RegExp(`["']?([^"']+)["']?\\/g\\/collect`, 'i');
 
@@ -230,19 +265,27 @@ export async function POST(request: Request) {
                                 const urlPart = sGtmMatch[1];
                                 if (urlPart.includes(rootDomain) && !urlPart.includes(hostname)) {
                                     containerSignalsFound = true;
+                                    capiData.google.has_custom_domain = true;
                                 }
                             }
                             if (collectMatch) {
                                 const urlPart = collectMatch[1];
                                 if (urlPart.includes(rootDomain) && !urlPart.includes(hostname) && !urlPart.includes('google-analytics.com')) {
                                     containerSignalsFound = true;
+                                    capiData.google.has_custom_domain = true;
                                 }
                             }
                         }
                     }
                 } catch (e) { }
-                if (containerSignalsFound) break;
+                if (containerSignalsFound && capiData.meta.has_event_id && capiData.tiktok.has_event_id) break;
             }
+
+            // --- CAPI Final Detection ---
+            capiData.meta.is_detected = capiData.meta.has_event_id || (capiData.meta.has_fbp_fbc && containerSignalsFound);
+            capiData.google.is_detected = capiData.google.has_custom_domain || (capiData.google.has_gcl_au && capiData.google.has_enhanced);
+            capiData.tiktok.is_detected = capiData.tiktok.has_event_id || capiData.tiktok.has_external_id;
+            capiData.line.is_detected = capiData.line.has_ifa_cl_id || capiData.line.has_line_id;
 
             // --- Decision Logic ---
             const hasGa4Direct = ga4MatchesHtml.length > 0;
@@ -265,6 +308,14 @@ export async function POST(request: Request) {
             } else if (hasGa4Direct || hasGa4Gtm || hasGtm) {
                 score = 3;
                 statusMessage = "標準的なGA4またはGTMの導入が検出されました。\nSafariからの流入で40%機会損失している可能性があります。";
+            }
+
+            // If CAPI is detected for any platform, ensure score is at least 4
+            if (capiData.meta.is_detected || capiData.google.is_detected || capiData.tiktok.is_detected || capiData.line.is_detected) {
+                if (score < 4) {
+                    score = 4;
+                    statusMessage = "1st Party Data Sender (CAPI / sGTM) の導入が検出されました。計測欠損が最小限に抑えられている可能性があります。";
+                }
             }
 
             // --- Universal Analytics Warning ---
@@ -293,7 +344,8 @@ export async function POST(request: Request) {
                         ga4_id: allGa4Ids[0] || null,
                         gtm_id: uniqueGtmIds[0] || null,
                         ua_id: allUaIds[0] || null,
-                        is_sgtm: isSgtm
+                        is_sgtm: isSgtm,
+                        capi_data: capiData
                     });
 
                     await sheets.spreadsheets.values.append({
@@ -323,7 +375,8 @@ export async function POST(request: Request) {
                     gtm_id: uniqueGtmIds[0] || null,
                     ua_id: allUaIds[0] || null,
                     is_sgtm: isSgtm,
-                    visited_url: targetUrl
+                    visited_url: targetUrl,
+                    capi_data: capiData
                 },
                 message: statusMessage
             });

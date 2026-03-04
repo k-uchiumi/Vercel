@@ -16,6 +16,12 @@ interface CheckResult {
     ua_id: string | null;
     is_sgtm: boolean;
     visited_url: string;
+    capi_data?: {
+      meta: { is_detected: boolean; has_event_id: boolean; has_fbp_fbc: boolean };
+      google: { is_detected: boolean; has_gcl_au: boolean; has_custom_domain: boolean; has_enhanced: boolean };
+      tiktok: { is_detected: boolean; has_external_id: boolean; has_event_id: boolean };
+      line: { is_detected: boolean; has_ifa_cl_id: boolean; has_line_id: boolean };
+    };
   };
 }
 
@@ -150,8 +156,8 @@ export default function Home() {
 
               <div className={styles.detailItem}>
                 <div className={styles.detailLabel}>サーバーサイド / 高度な実装</div>
-                <div className={`${styles.detailValue} ${result.details.is_sgtm ? styles.warning : styles.error}`} style={result.details.is_sgtm ? { color: 'var(--warning)' } : {}}>
-                  {result.details.is_sgtm ? '可能性あり (Proxy/sGTM)' : '未検出'}
+                <div className={`${styles.detailValue} ${result.details.is_sgtm ? styles.success : styles.error}`}>
+                  {result.details.is_sgtm ? '検出 (sGTM/Proxy)' : '未検出'}
                 </div>
               </div>
 
@@ -163,6 +169,40 @@ export default function Home() {
                 {result.details.ua_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.ua_id}</div>}
               </div>
             </div>
+
+            {result.details.capi_data && (
+              <div className={styles.capiContainer} style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                <h4 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--primary-color)' }}>1st Party Data Sender 判定 (CAPI / Server-side)</h4>
+                <div className={styles.detailsGrid}>
+                  <div className={styles.detailItem}>
+                    <div className={styles.detailLabel}>Meta (Facebook)</div>
+                    <div className={`${styles.detailValue} ${result.details.capi_data.meta.is_detected ? styles.success : styles.error}`}>
+                      {result.details.capi_data.meta.is_detected ? '導入の可能性大' : '未検出'}
+                    </div>
+                    {result.details.capi_data.meta.has_event_id && <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>Event ID 検出済</div>}
+                  </div>
+                  <div className={styles.detailItem}>
+                    <div className={styles.detailLabel}>Google 広告</div>
+                    <div className={`${styles.detailValue} ${result.details.capi_data.google.is_detected ? styles.success : styles.error}`}>
+                      {result.details.capi_data.google.is_detected ? '導入の可能性大' : '未検出'}
+                    </div>
+                    {result.details.capi_data.google.has_custom_domain && <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>計測用独自ドメイン検出済</div>}
+                  </div>
+                  <div className={styles.detailItem}>
+                    <div className={styles.detailLabel}>TikTok</div>
+                    <div className={`${styles.detailValue} ${result.details.capi_data.tiktok.is_detected ? styles.success : styles.error}`}>
+                      {result.details.capi_data.tiktok.is_detected ? '導入の可能性大' : '未検出'}
+                    </div>
+                  </div>
+                  <div className={styles.detailItem}>
+                    <div className={styles.detailLabel}>LINE 広告</div>
+                    <div className={`${styles.detailValue} ${result.details.capi_data.line.is_detected ? styles.success : styles.error}`}>
+                      {result.details.capi_data.line.is_detected ? '導入の可能性大' : '未検出'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {result.score === 3 && (
               <p className={styles.itpDisclaimer}>
