@@ -87,10 +87,10 @@ export default function Home() {
       <div className={styles.container}>
         <div className={styles.hero}>
           <h1 className={styles.title}>
-            GA4 check <span className="gradient-text">Pro</span>
+            サイト健全性チェック
           </h1>
           <p className={styles.subtitle}>
-            Google Analytics 4 の導入成熟度を瞬時に分析します。
+            サイトの導入成熟度を瞬時に分析します。
           </p>
         </div>
 
@@ -110,6 +110,9 @@ export default function Home() {
               {loading ? <div className={styles.loader} /> : '分析する'}
             </button>
           </form>
+          <p className={styles.inputDisclaimer}>
+            ※トップページの公開タグ情報のみを安全にスキャンします。
+          </p>
           {error && (
             <div style={{ textAlign: 'center', marginTop: '1rem' }}>
               <p style={{ color: 'var(--error)', marginBottom: '1rem' }}>{error}</p>

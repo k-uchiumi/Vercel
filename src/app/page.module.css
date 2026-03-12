@@ -302,6 +302,13 @@
   line-height: 1.5;
 }
 
+.inputDisclaimer {
+  font-size: 0.85rem;
+  color: #a1a1aa;
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
 .resultDisclaimer {
   font-size: 0.8rem;
   color: #71717a;
