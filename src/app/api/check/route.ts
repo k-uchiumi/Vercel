@@ -83,9 +83,9 @@ export async function POST(request: Request) {
                         details = JSON.parse(detailsRaw);
                     } catch (e) { console.error('Failed to parse cached details', e); }
 
-                    // Cache Invalidation for new fields (CoMo v2)
-                    if (details.has_como_v2 === undefined) {
-                        console.log('Cache Invalidation: Missing has_como_v2 field');
+                    // Cache Invalidation for new fields (CoMo v2, All IDs, Obfuscation, CMP)
+                    if (details.has_como_v2 === undefined || details.all_ga4_ids === undefined || details.has_obfuscated_loader === undefined || details.has_cmp === undefined) {
+                        console.log('Cache Invalidation: Missing new fields including has_cmp');
                     } else {
                         // Intelligent column detection due to misalignment history
                         let scoreIdx = 2; // Default Column C
@@ -196,6 +196,38 @@ export async function POST(request: Request) {
                             html.includes('gtm.init_consent') ||
                             html.includes('/g/collect');
             let isSgtm = false;
+            let hasObfuscatedLoader = false;
+            
+            // --- Custom Loader / Obfuscation Detection ---
+            // Check for dataLayer init but missing standard GTM, or stape domain, or custom js?id= loaders
+            const hasDataLayerInit = html.includes('window.dataLayer') || html.includes('window["dataLayer"]');
+            const hasStape = html.includes('.stape.') || html.includes('/stape/');
+            
+            // Match custom GTM loader patterns (e.g., fetching a JS file that looks like a tag manager but not from official domains)
+            // Example: <script src="https://custom.domain.com/js?id=GTM-XXXXX"></script> where domain is NOT googletagmanager.com
+            const customLoaderRegex = /src=["']https?:\/\/(?!www\.googletagmanager\.com)[^"']+\/(gtm\.js|js\?id=|gtag\/js)/i;
+            const hasCustomLoaderScript = customLoaderRegex.test(html);
+            
+            // If dataLayer is initialized but no standard GTM ID is found directly, or if specific patterns match
+            if (hasStape || hasCustomLoaderScript || (hasDataLayerInit && uniqueGtmIds.length === 0)) {
+                hasObfuscatedLoader = true;
+            }
+
+            // --- CMP (Consent Management Platform) Detection ---
+            const cmpPatterns = [
+                'cdn.cookieyes.com',
+                'cdn.cookielaw.org',   // OneTrust
+                'consent.cookiebot.com',
+                'app.termly.io',
+                'optanon',             // OneTrust alternative
+                'didomi.io',
+                'usercentrics.eu',
+                'consent.trustarc.com',
+                'osano.com',
+                'iubenda.com'
+            ];
+            const hasCmp = cmpPatterns.some(pattern => html.includes(pattern));
+
             let containerSignalsFound = false;
             const ga4IdsFromContainers: string[] = [];
             const uaIdsFromContainers: string[] = [];
@@ -367,6 +399,8 @@ export async function POST(request: Request) {
                 statusMessage += "\nUAのタグが残っています。もしくはUAの計測IDでGA4を計測しています";
             }
 
+            const isComoMisconfigured = hasComoV2 && !hasCmp;
+
             // --- Logging to Google Sheets ---
             try {
                 if (clientEmail && privateKey && spreadsheetId) {
@@ -386,9 +420,15 @@ export async function POST(request: Request) {
                         has_gtm: hasGtm,
                         has_ua: hasUa,
                         ga4_id: allGa4Ids[0] || null,
+                        all_ga4_ids: allGa4Ids,
                         gtm_id: uniqueGtmIds[0] || null,
+                        all_gtm_ids: uniqueGtmIds,
                         ua_id: allUaIds[0] || null,
+                        all_ua_ids: allUaIds,
                         is_sgtm: isSgtm,
+                        has_obfuscated_loader: hasObfuscatedLoader,
+                        has_cmp: hasCmp,
+                        is_como_misconfigured: isComoMisconfigured,
                         has_como_v2: hasComoV2,
                         capi_data: capiData
                     });
@@ -417,9 +457,15 @@ export async function POST(request: Request) {
                     has_gtm: hasGtm,
                     has_ua: hasUa,
                     ga4_id: allGa4Ids[0] || null,
+                    all_ga4_ids: allGa4Ids,
                     gtm_id: uniqueGtmIds[0] || null,
+                    all_gtm_ids: uniqueGtmIds,
                     ua_id: allUaIds[0] || null,
+                    all_ua_ids: allUaIds,
                     is_sgtm: isSgtm,
+                    has_obfuscated_loader: hasObfuscatedLoader,
+                    has_cmp: hasCmp,
+                    is_como_misconfigured: isComoMisconfigured,
                     has_como_v2: hasComoV2,
                     visited_url: targetUrl,
                     capi_data: capiData

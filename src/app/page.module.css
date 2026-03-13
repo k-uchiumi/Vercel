@@ -175,6 +175,23 @@
   color: var(--error);
 }
 
+.idList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.idBadge {
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.4rem;
+  color: #fff;
+  opacity: 0.8;
+  font-family: monospace;
+}
+
 /* Used for 'Not Found' but labeled as error color for contrast */
 .warning {
   color: var(--warning);

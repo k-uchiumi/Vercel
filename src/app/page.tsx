@@ -12,9 +12,15 @@ interface CheckResult {
     has_gtm: boolean;
     has_ua: boolean;
     ga4_id: string | null;
+    all_ga4_ids: string[];
     gtm_id: string | null;
+    all_gtm_ids: string[];
     ua_id: string | null;
+    all_ua_ids: string[];
     is_sgtm: boolean;
+    has_obfuscated_loader?: boolean;
+    has_cmp: boolean;
+    is_como_misconfigured: boolean;
     has_como_v2: boolean;
     visited_url: string;
     capi_data?: {
@@ -142,35 +148,61 @@ export default function Home() {
 
             <div className={styles.detailsGrid}>
               <div className={styles.detailItem}>
-                <div className={styles.detailLabel}>GA4 直接実装</div>
-                <div className={`${styles.detailValue} ${result.details.has_ga4_direct ? styles.success : styles.error}`}>
-                  {result.details.has_ga4_direct ? '検出' : '未検出'}
+                <div className={styles.detailLabel}>GA4 計測 ID</div>
+                <div className={`${styles.detailValue} ${result.details.all_ga4_ids && result.details.all_ga4_ids.length > 0 ? styles.success : styles.error}`}>
+                  {result.details.all_ga4_ids && result.details.all_ga4_ids.length > 0 ? '検出' : '未検出'}
                 </div>
-                {result.details.has_ga4_direct && result.details.ga4_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.ga4_id}</div>}
+                {result.details.all_ga4_ids && result.details.all_ga4_ids.length > 0 && (
+                  <div className={styles.idList}>
+                    {result.details.all_ga4_ids.map(id => <div key={id} className={styles.idBadge}>{id}</div>)}
+                  </div>
+                )}
+                {result.details.has_ga4_direct && <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>HTML内直接記述あり</div>}
               </div>
 
               <div className={styles.detailItem}>
-                <div className={styles.detailLabel}>GTM コンテナ</div>
-                <div className={`${styles.detailValue} ${result.details.has_gtm ? styles.success : styles.error}`}>
-                  {result.details.has_gtm ? '検出' : '未検出'}
+                <div className={styles.detailLabel}>GTM コンテナ ID</div>
+                <div className={`${styles.detailValue} ${result.details.all_gtm_ids && result.details.all_gtm_ids.length > 0 ? styles.success : styles.error}`}>
+                  {result.details.all_gtm_ids && result.details.all_gtm_ids.length > 0 ? '検出' : '未検出'}
                 </div>
-                {result.details.gtm_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.gtm_id}</div>}
+                {result.details.all_gtm_ids && result.details.all_gtm_ids.length > 0 && (
+                  <div className={styles.idList}>
+                    {result.details.all_gtm_ids.map(id => <div key={id} className={styles.idBadge}>{id}</div>)}
+                  </div>
+                )}
                 {result.details.has_ga4_gtm && <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>GA4タグ内蔵</div>}
               </div>
 
               <div className={styles.detailItem}>
                 <div className={styles.detailLabel}>サーバーサイド / 高度な実装</div>
-                <div className={`${styles.detailValue} ${result.details.is_sgtm ? styles.success : styles.error}`}>
-                  {result.details.is_sgtm ? '検出 (sGTM/Proxy)' : '未検出'}
+                <div className={`${styles.detailValue} ${result.details.is_sgtm || result.details.has_obfuscated_loader ? styles.success : styles.error}`}>
+                  {result.details.is_sgtm || result.details.has_obfuscated_loader ? '検出 (sGTM/等)' : '未検出'}
                 </div>
+                {result.details.has_obfuscated_loader && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--warning)', marginTop: '0.5rem', lineHeight: '1.4' }}>
+                        ⚠️ カスタムローダー検知: 独自ドメイン経由等でタグが高度に隠蔽・配信されている可能性があります（IDの一部が抽出できない場合があります）
+                      <div className={styles.detailItem}>
+                <div className={styles.detailLabel}>CMP (同意管理ツール)</div>
+                <div className={`${styles.detailValue} ${result.details.has_cmp ? styles.success : styles.error}`}>
+                  {result.details.has_cmp ? '検出' : '未検出'}
+                </div>
+                {!result.details.has_cmp && result.details.has_como_v2 && <div style={{ fontSize: '0.7rem', color: 'var(--warning)', marginTop: '0.3rem' }}>※CMP未実装の可能性</div>}
+              </div>
+
+            </div>
+                )}
               </div>
 
               <div className={styles.detailItem}>
-                <div className={styles.detailLabel}>UA (旧アナリティクス)</div>
-                <div className={`${styles.detailValue} ${result.details.has_ua ? styles.warning : styles.success}`} style={result.details.has_ua ? { color: 'var(--warning)' } : {}}>
-                  {result.details.has_ua ? '残存' : '未検出'}
+                <div className={styles.detailLabel}>UA 計測 ID</div>
+                <div className={`${styles.detailValue} ${result.details.all_ua_ids && result.details.all_ua_ids.length > 0 ? styles.warning : styles.success}`} style={result.details.has_ua ? { color: 'var(--warning)' } : {}}>
+                  {result.details.all_ua_ids && result.details.all_ua_ids.length > 0 ? '残存' : '未検出'}
                 </div>
-                {result.details.ua_id && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>{result.details.ua_id}</div>}
+                {result.details.all_ua_ids && result.details.all_ua_ids.length > 0 && (
+                  <div className={styles.idList}>
+                    {result.details.all_ua_ids.map(id => <div key={id} className={styles.idBadge}>{id}</div>)}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -214,21 +246,21 @@ export default function Home() {
               </p>
             )}
 
-            <a href="https://mareinterno.com/inquiry/" target="_blank" rel="noopener noreferrer" className={styles.contactButton}>
-              詳細を確認したい場合はこちら
-            </a>
-
-            <p className={styles.resultDisclaimer}>
-              本診断は公開タグの検知に基づく簡易的なものです。サイト構造や設定により、実際の導入状況と異なる判定が出る場合があります。
-            </p>
-
-            <div className={`${styles.comoStatus} ${result.details.has_como_v2 ? styles.comoSuccess : styles.comoError}`}>
-              {result.details.has_como_v2 ? (
-                <>CoMo v2 信号検出： 「Google広告の高度な計測に対応しています」</>
-              ) : (
+            <div className={`${styles.comoStatus} ${result.details.has_como_v2 && !result.details.is_como_misconfigured ? styles.comoSuccess : (!result.details.has_como_v2 ? styles.comoError : '')}`} style={result.details.is_como_misconfigured ? { background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.2)', color: 'var(--warning)' } : {}}>
+              {result.details.has_como_v2 && !result.details.is_como_misconfigured && (
+                <>CoMo v2 信号検出 + CMP導入済： 「Google広告の高度な計測に対応しています」</>
+              )}
+              {result.details.is_como_misconfigured && (
+                <>⚠️ CoMo v2 信号はありますがCMPが未検出です：「設定が機能していない（空回りしている）不健全な状態の可能性が高いです」</>
+              )}
+              {!result.details.has_como_v2 && (
                 <>🔴CoMo v2 信号未検出： 「2024年以降の広告最適化が制限されている可能性があります」</>
               )}
             </div>
+
+            <a href="https://mareinterno.com/inquiry/" target="_blank" rel="noopener noreferrer" className={styles.contactButton}>
+              詳細を確認したい場合はこちら
+            </a>
           </div>
         )}
       </div>
