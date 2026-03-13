@@ -73,35 +73,39 @@ export async function POST(request: Request) {
                     const rowUrl = (rowList[1] || "").replace(/\/$/, "");
                     return rowUrl === normalizedUrl;
                 });
-
                 if (cachedRow && !url.includes('cache=clear')) {
                     console.log('Cache Hit for:', normalizedUrl);
 
-                    // Intelligent column detection due to misalignment history
-                    let scoreIdx = 2; // Default Column C
-                    let msgIdx = 3;   // Default Column D
-                    let detIdx = 4;   // Default Column E
-
-                    if (cachedRow.length > 7 && !isNaN(Number(cachedRow[6]))) {
-                        scoreIdx = 6; msgIdx = 7; detIdx = 8; // Shifted Structure
-                    } else if (cachedRow.length > 5 && !isNaN(Number(cachedRow[4]))) {
-                        scoreIdx = 4; msgIdx = 5; detIdx = 6; // Partial Shift
-                    }
-
-                    let details = {};
+                    let details: any = {};
                     try {
+                        const detIdx = cachedRow.length > 7 && !isNaN(Number(cachedRow[6])) ? 8 : (cachedRow.length > 5 && !isNaN(Number(cachedRow[4])) ? 6 : 4);
                         const detailsRaw = cachedRow[detIdx] || "{}";
                         details = JSON.parse(detailsRaw);
                     } catch (e) { console.error('Failed to parse cached details', e); }
 
-                    return NextResponse.json({
-                        score: Number(cachedRow[scoreIdx]),
-                        message: cachedRow[msgIdx] || "",
-                        details: {
-                            ...details,
-                            visited_url: cachedRow[1]
+                    // Cache Invalidation for new fields (CoMo v2)
+                    if (details.has_como_v2 === undefined) {
+                        console.log('Cache Invalidation: Missing has_como_v2 field');
+                    } else {
+                        // Intelligent column detection due to misalignment history
+                        let scoreIdx = 2; // Default Column C
+                        let msgIdx = 3;   // Default Column D
+                        
+                        if (cachedRow.length > 7 && !isNaN(Number(cachedRow[6]))) {
+                            scoreIdx = 6; msgIdx = 7;
+                        } else if (cachedRow.length > 5 && !isNaN(Number(cachedRow[4]))) {
+                            scoreIdx = 4; msgIdx = 5;
                         }
-                    });
+
+                        return NextResponse.json({
+                            score: Number(cachedRow[scoreIdx]),
+                            message: cachedRow[msgIdx] || "",
+                            details: {
+                                ...details,
+                                visited_url: cachedRow[1]
+                            }
+                        });
+                    }
                 }
             }
         } catch (e: any) {
@@ -184,7 +188,13 @@ export async function POST(request: Request) {
             const hostname = new URL(targetUrl).hostname;
             const rootDomain = hostname.split('.').slice(-2).join('.');
             const rootDomainEscaped = rootDomain.replace(/\./g, '\\.');
-
+            
+            let hasComoV2 = html.includes('gcd=') || 
+                            html.includes('gcs=') ||
+                            html.includes('gtag("consent"') || 
+                            html.includes("gtag('consent'") || 
+                            html.includes('gtm.init_consent') ||
+                            html.includes('/g/collect');
             let isSgtm = false;
             let containerSignalsFound = false;
             const ga4IdsFromContainers: string[] = [];
@@ -230,6 +240,17 @@ export async function POST(request: Request) {
                         const innerUa = gtmJs.match(/UA-[0-9]+-[0-9]+/g) || [];
                         ga4IdsFromContainers.push(...innerGa4);
                         uaIdsFromContainers.push(...innerUa);
+
+                        // CoMo v2 / gcd signal in GTM
+                        if (gtmJs.includes('gcd=') || 
+                            gtmJs.includes('gcd:') || 
+                            gtmJs.includes('"gcd"') ||
+                            gtmJs.includes('gtm.init_consent') ||
+                            gtmJs.includes('vtp_migratedToV2') ||
+                            gtmJs.includes('consent_mode') ||
+                            gtmJs.includes('/g/collect')) {
+                            hasComoV2 = true;
+                        }
 
                         // CAPI Signals in GTM
                         if (gtmJs.includes('event_id') || gtmJs.includes('eid')) capiData.meta.has_event_id = true;
@@ -281,7 +302,31 @@ export async function POST(request: Request) {
                 if (containerSignalsFound && capiData.meta.has_event_id && capiData.tiktok.has_event_id) break;
             }
 
-            // --- CAPI Final Detection ---
+            // --- Deep Scan for GA4 Scripts (gtag.js) ---
+            const allGa4Ids = Array.from(new Set([...ga4MatchesHtml, ...ga4IdsFromContainers]));
+            for (const ga4Id of allGa4Ids) {
+                try {
+                    const gtagRes = await fetch(`https://www.googletagmanager.com/gtag/js?id=${ga4Id}`, {
+                        headers: { 'User-Agent': 'Mozilla/5.0' },
+                        next: { revalidate: 3600 }
+                    });
+                    if (gtagRes.ok) {
+                        const gtagJs = await gtagRes.text();
+                        if (gtagJs.includes('gcd=') || 
+                            gtagJs.includes('gcd:') || 
+                            gtagJs.includes('"gcd"') ||
+                            gtagJs.includes('gtm.init_consent') ||
+                            gtagJs.includes('vtp_migratedToV2') ||
+                            gtagJs.includes('consent_mode') ||
+                            gtagJs.includes('/g/collect')) {
+                            hasComoV2 = true;
+                        }
+                        // Also check for CAPI signals in gtag.js
+                        if (gtagJs.includes('event_id') || gtagJs.includes('eid')) capiData.meta.has_event_id = true;
+                        if (gtagJs.includes('_gcl_au')) capiData.google.has_gcl_au = true;
+                    }
+                } catch (e) {}
+            }
             capiData.meta.is_detected = capiData.meta.has_event_id || (capiData.meta.has_fbp_fbc && containerSignalsFound);
             capiData.google.is_detected = capiData.google.has_custom_domain || (capiData.google.has_gcl_au && capiData.google.has_enhanced);
             capiData.tiktok.is_detected = capiData.tiktok.has_event_id || capiData.tiktok.has_external_id;
@@ -291,7 +336,6 @@ export async function POST(request: Request) {
             const hasGa4Direct = ga4MatchesHtml.length > 0;
             const hasGa4Gtm = ga4IdsFromContainers.length > 0;
             const hasGtm = uniqueGtmIds.length > 0;
-            const allGa4Ids = Array.from(new Set([...ga4MatchesHtml, ...ga4IdsFromContainers]));
             const allUaIds = Array.from(new Set([...uaMatchesHtml, ...uaIdsFromContainers]));
             const hasUa = allUaIds.length > 0;
 
@@ -345,6 +389,7 @@ export async function POST(request: Request) {
                         gtm_id: uniqueGtmIds[0] || null,
                         ua_id: allUaIds[0] || null,
                         is_sgtm: isSgtm,
+                        has_como_v2: hasComoV2,
                         capi_data: capiData
                     });
 
@@ -375,6 +420,7 @@ export async function POST(request: Request) {
                     gtm_id: uniqueGtmIds[0] || null,
                     ua_id: allUaIds[0] || null,
                     is_sgtm: isSgtm,
+                    has_como_v2: hasComoV2,
                     visited_url: targetUrl,
                     capi_data: capiData
                 },

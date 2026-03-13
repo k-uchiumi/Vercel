@@ -15,6 +15,7 @@ interface CheckResult {
     gtm_id: string | null;
     ua_id: string | null;
     is_sgtm: boolean;
+    has_como_v2: boolean;
     visited_url: string;
     capi_data?: {
       meta: { is_detected: boolean; has_event_id: boolean; has_fbp_fbc: boolean };
@@ -220,6 +221,14 @@ export default function Home() {
             <p className={styles.resultDisclaimer}>
               本診断は公開タグの検知に基づく簡易的なものです。サイト構造や設定により、実際の導入状況と異なる判定が出る場合があります。
             </p>
+
+            <div className={`${styles.comoStatus} ${result.details.has_como_v2 ? styles.comoSuccess : styles.comoError}`}>
+              {result.details.has_como_v2 ? (
+                <>CoMo v2 信号検出： 「Google広告の高度な計測に対応しています」</>
+              ) : (
+                <>🔴CoMo v2 信号未検出： 「2024年以降の広告最適化が制限されている可能性があります」</>
+              )}
+            </div>
           </div>
         )}
       </div>
