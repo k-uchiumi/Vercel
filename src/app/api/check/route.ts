@@ -192,9 +192,7 @@ export async function POST(request: Request) {
             let hasComoV2 = html.includes('gcd=') || 
                             html.includes('gcs=') ||
                             html.includes('gtag("consent"') || 
-                            html.includes("gtag('consent'") || 
-                            html.includes('gtm.init_consent') ||
-                            html.includes('/g/collect');
+                            html.includes("gtag('consent'");
             let isSgtm = false;
             let hasObfuscatedLoader = false;
             
@@ -235,19 +233,19 @@ export async function POST(request: Request) {
             // --- 1st Party Data Sender (CAPI) Detection ---
             const capiData = {
                 meta: {
-                    has_event_id: html.includes('event_id') || html.includes('eid'),
+                    has_event_id: false,
                     has_fbp_fbc: html.includes('_fbp') || html.includes('_fbc'),
                     is_detected: false
                 },
                 google: {
-                    has_gcl_au: html.includes('_gcl_au'),
+                    has_gcl_au: false,
                     has_custom_domain: false,
-                    has_enhanced: html.includes('hashed_email') || html.includes('em'),
+                    has_enhanced: html.includes('hashed_email'),
                     is_detected: false
                 },
                 tiktok: {
                     has_external_id: html.includes('external_id'),
-                    has_event_id: html.includes('tt_pixel_id') && html.includes('event_id'),
+                    has_event_id: false,
                     is_detected: false
                 },
                 line: {
@@ -273,60 +271,43 @@ export async function POST(request: Request) {
                         ga4IdsFromContainers.push(...innerGa4);
                         uaIdsFromContainers.push(...innerUa);
 
-                        // CoMo v2 / gcd signal in GTM
+                        // CoMo v2 / gcd signal in GTM (Strict matching)
                         if (gtmJs.includes('gcd=') || 
                             gtmJs.includes('gcd:') || 
-                            gtmJs.includes('"gcd"') ||
-                            gtmJs.includes('gtm.init_consent') ||
-                            gtmJs.includes('vtp_migratedToV2') ||
-                            gtmJs.includes('consent_mode') ||
-                            gtmJs.includes('/g/collect')) {
+                            gtmJs.includes('"gcd"')) {
                             hasComoV2 = true;
                         }
 
-                        // CAPI Signals in GTM
-                        if (gtmJs.includes('event_id') || gtmJs.includes('eid')) capiData.meta.has_event_id = true;
+                        // CAPI Signals in GTM (Strict matching)
                         if (gtmJs.includes('_fbp') || gtmJs.includes('_fbc')) capiData.meta.has_fbp_fbc = true;
-                        if (gtmJs.includes('_gcl_au')) capiData.google.has_gcl_au = true;
-                        if (gtmJs.includes('hashed_email') || gtmJs.includes('em')) capiData.google.has_enhanced = true;
+                        if (gtmJs.includes('hashed_email')) capiData.google.has_enhanced = true;
                         if (gtmJs.includes('external_id')) capiData.tiktok.has_external_id = true;
-                        if (gtmJs.includes('tt_pixel_id') && gtmJs.includes('event_id')) capiData.tiktok.has_event_id = true;
+                        if (gtmJs.includes('tt_pixel_id')) capiData.tiktok.has_event_id = true;
                         if (gtmJs.includes('ifa') || gtmJs.includes('cl_id')) capiData.line.has_ifa_cl_id = true;
                         if (gtmJs.includes('_line_id')) capiData.line.has_line_id = true;
+                        if (gtmJs.includes('_line_id')) capiData.line.has_line_id = true;
 
-                        // Strict same-root-domain signal checking
-                        const firstPartyPattern = new RegExp(`[a-zA-Z0-9.-]+\\.${rootDomainEscaped}`, 'i');
-                        if (firstPartyPattern.test(gtmJs)) {
-                            const subdomains = gtmJs.match(new RegExp(`[a-zA-Z0-9.-]+\\.${rootDomainEscaped}`, 'gi')) || [];
-                            for (const sub of subdomains) {
-                                if (sub !== hostname) {
-                                    containerSignalsFound = true;
-                                    capiData.google.has_custom_domain = true;
-                                    break;
-                                }
+                        // sGTM detect: only flag has_custom_domain if server_container_url or /g/collect
+                        // explicitly points to a subdomain of the site's root domain
+                        const sGtmUrlPattern = new RegExp(`server_container_url["']?\\s*[:,]\\s*["']https?://([^/"']+)`, 'i');
+                        const collectUrlPattern = new RegExp(`https?://([^/"'\\s]+)/g/collect`, 'gi');
+
+                        const sGtmUrlMatch = gtmJs.match(sGtmUrlPattern);
+                        if (sGtmUrlMatch) {
+                            const urlHost = sGtmUrlMatch[1].toLowerCase().split(':')[0]; // strip port
+                            if (urlHost.endsWith('.' + rootDomain) && urlHost !== hostname) {
+                                containerSignalsFound = true;
+                                capiData.google.has_custom_domain = true;
                             }
                         }
 
-                        if (gtmJs.includes('server_container_url') || gtmJs.includes('/g/collect')) {
-                            const sGtmValuePattern = new RegExp(`server_container_url["']?\\s*[:,]\\s*["']([^"']+)["']`, 'i');
-                            const collectValuePattern = new RegExp(`["']?([^"']+)["']?\\/g\\/collect`, 'i');
-
-                            const sGtmMatch = gtmJs.match(sGtmValuePattern);
-                            const collectMatch = gtmJs.match(collectValuePattern);
-
-                            if (sGtmMatch) {
-                                const urlPart = sGtmMatch[1];
-                                if (urlPart.includes(rootDomain) && !urlPart.includes(hostname)) {
-                                    containerSignalsFound = true;
-                                    capiData.google.has_custom_domain = true;
-                                }
-                            }
-                            if (collectMatch) {
-                                const urlPart = collectMatch[1];
-                                if (urlPart.includes(rootDomain) && !urlPart.includes(hostname) && !urlPart.includes('google-analytics.com')) {
-                                    containerSignalsFound = true;
-                                    capiData.google.has_custom_domain = true;
-                                }
+                        const collectMatches = [...gtmJs.matchAll(collectUrlPattern)];
+                        for (const m of collectMatches) {
+                            const urlHost = m[1].toLowerCase().split(':')[0]; // strip port
+                            if (urlHost.endsWith('.' + rootDomain) && urlHost !== hostname) {
+                                containerSignalsFound = true;
+                                capiData.google.has_custom_domain = true;
+                                break;
                             }
                         }
                     }
@@ -346,16 +327,10 @@ export async function POST(request: Request) {
                         const gtagJs = await gtagRes.text();
                         if (gtagJs.includes('gcd=') || 
                             gtagJs.includes('gcd:') || 
-                            gtagJs.includes('"gcd"') ||
-                            gtagJs.includes('gtm.init_consent') ||
-                            gtagJs.includes('vtp_migratedToV2') ||
-                            gtagJs.includes('consent_mode') ||
-                            gtagJs.includes('/g/collect')) {
+                            gtagJs.includes('"gcd"')) {
                             hasComoV2 = true;
                         }
-                        // Also check for CAPI signals in gtag.js
-                        if (gtagJs.includes('event_id') || gtagJs.includes('eid')) capiData.meta.has_event_id = true;
-                        if (gtagJs.includes('_gcl_au')) capiData.google.has_gcl_au = true;
+                        // (Removed loose check for 'event_id' and '_gcl_au' in gtag.js to prevent false positives)
                     }
                 } catch (e) {}
             }
