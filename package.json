@@ -6,20 +6,22 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "pages:build": "npx @cloudflare/next-on-pages"
   },
   "dependencies": {
-    "googleapis": "^171.4.0",
-    "next": "16.1.6",
+    "next": "15.2.4",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.7",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
-    "typescript": "^5"
+    "eslint-config-next": "15.2.4",
+    "typescript": "^5",
+    "wrangler": "^3.109.2"
   }
 }

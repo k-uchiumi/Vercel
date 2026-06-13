@@ -1,7 +1,137 @@
 import { NextResponse } from 'next/server';
-import { google } from 'googleapis';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
+
+// --- Web Crypto and Fetch based Google Sheets API implementation ---
+async function getGoogleAccessToken(clientEmail: string, privateKey: string, scope: string): Promise<string> {
+  const pemHeader = "-----BEGIN PRIVATE KEY-----";
+  const pemFooter = "-----END PRIVATE KEY-----";
+  
+  let pemContents = privateKey.trim();
+  if (pemContents.startsWith(pemHeader)) {
+    pemContents = pemContents.substring(pemHeader.length);
+  }
+  if (pemContents.endsWith(pemFooter)) {
+    pemContents = pemContents.substring(0, pemContents.length - pemFooter.length);
+  }
+  pemContents = pemContents.replace(/\s+/g, '');
+  
+  const binaryDerString = atob(pemContents);
+  const binaryDer = new Uint8Array(binaryDerString.length);
+  for (let i = 0; i < binaryDerString.length; i++) {
+    binaryDer[i] = binaryDerString.charCodeAt(i);
+  }
+  
+  const importedKey = await crypto.subtle.importKey(
+    "pkcs8",
+    binaryDer.buffer,
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      hash: { name: "SHA-256" },
+    },
+    false,
+    ["sign"]
+  );
+  
+  const header = {
+    alg: "RS256",
+    typ: "JWT"
+  };
+  
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: clientEmail,
+    scope: scope,
+    aud: "https://oauth2.googleapis.com/token",
+    exp: now + 3600,
+    iat: now
+  };
+  
+  const base64url = (source: string | ArrayBuffer): string => {
+    let binary = "";
+    if (typeof source === "string") {
+      binary = btoa(unescape(encodeURIComponent(source)));
+    } else {
+      const bytes = new Uint8Array(source);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      binary = btoa(binary);
+    }
+    return binary.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  };
+  
+  const encodedHeader = base64url(JSON.stringify(header));
+  const encodedPayload = base64url(JSON.stringify(payload));
+  const tokenInput = `${encodedHeader}.${encodedPayload}`;
+  
+  const encoder = new TextEncoder();
+  const data = encoder.encode(tokenInput);
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    importedKey,
+    data
+  );
+  
+  const encodedSignature = base64url(signature);
+  const jwt = `${tokenInput}.${encodedSignature}`;
+  
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt
+    })
+  });
+  
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Failed to get OAuth token: ${response.status} ${errText}`);
+  }
+  
+  const tokenData = await response.json() as { access_token: string };
+  return tokenData.access_token;
+}
+
+async function getSpreadsheetValues(accessToken: string, spreadsheetId: string, range: string) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
+  const response = await fetch(url, {
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Accept": "application/json"
+    }
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Google Sheets GET error: ${response.status} ${err}`);
+  }
+  return await response.json() as { values?: any[][] };
+}
+
+async function appendSpreadsheetValues(accessToken: string, spreadsheetId: string, range: string, values: any[][]) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify({
+      values: values
+    })
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Google Sheets APPEND error: ${response.status} ${err}`);
+  }
+  return await response.json();
+}
 
 export async function POST(request: Request) {
     try {
@@ -53,21 +183,13 @@ export async function POST(request: Request) {
         // --- URL Caching (Check Google Sheet) ---
         try {
             if (clientEmail && privateKey && spreadsheetId) {
-                const auth = new google.auth.GoogleAuth({
-                    credentials: {
-                        client_email: clientEmail,
-                        private_key: privateKey,
-                    },
-                    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-                });
-                const sheets = google.sheets({ version: 'v4', auth });
-
-                const response = await sheets.spreadsheets.values.get({
-                    spreadsheetId,
-                    range: 'ga4checkpro!A:E',
-                });
-
-                const rows = response.data.values || [];
+                const accessToken = await getGoogleAccessToken(
+                    clientEmail,
+                    privateKey,
+                    'https://www.googleapis.com/auth/spreadsheets'
+                );
+                const data = await getSpreadsheetValues(accessToken, spreadsheetId, 'ga4checkpro!A:E');
+                const rows = data.values || [];
                 // Find the LATEST row for this URL (last occurrence)
                 const cachedRow = [...rows].reverse().find((rowList: any[]) => {
                     const rowUrl = (rowList[1] || "").replace(/\/$/, "");
@@ -140,20 +262,18 @@ export async function POST(request: Request) {
                     // Log to Sheets even for 403
                     try {
                         if (clientEmail && privateKey && spreadsheetId) {
-                            const auth = new google.auth.GoogleAuth({
-                                credentials: { client_email: clientEmail, private_key: privateKey },
-                                scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-                            });
-                            const sheets = google.sheets({ version: 'v4', auth });
+                            const accessToken = await getGoogleAccessToken(
+                                clientEmail,
+                                privateKey,
+                                'https://www.googleapis.com/auth/spreadsheets'
+                            );
                             const timestamp = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-                            await sheets.spreadsheets.values.append({
+                            await appendSpreadsheetValues(
+                                accessToken,
                                 spreadsheetId,
-                                range: 'ga4checkpro!A1',
-                                valueInputOption: 'USER_ENTERED',
-                                requestBody: {
-                                    values: [[timestamp, targetUrl, 0, statusMessage, JSON.stringify({ error: '403 Forbidden', is_sgtm: false })]],
-                                },
-                            });
+                                'ga4checkpro!A1',
+                                [[timestamp, targetUrl, 0, statusMessage, JSON.stringify({ error: '403 Forbidden', is_sgtm: false })]]
+                            );
                         }
                     } catch (logErr) { }
 
@@ -379,15 +499,11 @@ export async function POST(request: Request) {
             // --- Logging to Google Sheets ---
             try {
                 if (clientEmail && privateKey && spreadsheetId) {
-                    const auth = new google.auth.GoogleAuth({
-                        credentials: {
-                            client_email: clientEmail,
-                            private_key: privateKey,
-                        },
-                        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-                    });
-
-                    const sheets = google.sheets({ version: 'v4', auth });
+                    const accessToken = await getGoogleAccessToken(
+                        clientEmail,
+                        privateKey,
+                        'https://www.googleapis.com/auth/spreadsheets'
+                    );
                     const timestamp = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
                     const detailsJson = JSON.stringify({
                         has_ga4_direct: hasGa4Direct,
@@ -408,16 +524,12 @@ export async function POST(request: Request) {
                         capi_data: capiData
                     });
 
-                    await sheets.spreadsheets.values.append({
+                    await appendSpreadsheetValues(
+                        accessToken,
                         spreadsheetId,
-                        range: 'ga4checkpro!A1',
-                        valueInputOption: 'USER_ENTERED',
-                        requestBody: {
-                            values: [
-                                [timestamp, targetUrl, score, statusMessage, detailsJson]
-                            ],
-                        },
-                    });
+                        'ga4checkpro!A1',
+                        [[timestamp, targetUrl, score, statusMessage, detailsJson]]
+                    );
                 }
             } catch (logError: any) {
                 console.error('Google Sheets Logging Error:', logError);
