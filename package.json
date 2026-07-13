@@ -10,13 +10,16 @@
     "pages:build": "npx @cloudflare/next-on-pages"
   },
   "dependencies": {
+    "jspdf": "^4.2.1",
     "next": "15.2.4",
+    "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.13.7",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
