@@ -6,6 +6,7 @@ import {
   syncPosModeFromQuery,
   saveResultForReceipt,
   loadSavedResultForReceipt,
+  clearSavedResultForReceipt,
   buildReceiptPrintUrl,
   buildCouponPrintUrl,
   firePrint,
@@ -76,6 +77,7 @@ export default function Home() {
       window.history.replaceState({}, '', window.location.pathname);
       if (saved) {
         setResult(saved as CheckResult);
+        clearSavedResultForReceipt();
         void handleCouponAutoFire(saved as CheckResult);
       }
     } else if (printFail === 'receipt' || printFail === 'coupon') {

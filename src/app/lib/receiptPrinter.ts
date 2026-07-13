@@ -88,16 +88,18 @@ export function isPosModeEnabled(): boolean {
 export function saveResultForReceipt(result: ReceiptCheckResult): void {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(RECEIPT_RESULT_STORAGE_KEY, JSON.stringify(result));
+    // sessionStorageはSII URL Print Agent経由でブラウザに戻った際に
+    // タブ/セッションが引き継がれず消えることがあるため、localStorageを使用する。
+    window.localStorage.setItem(RECEIPT_RESULT_STORAGE_KEY, JSON.stringify(result));
   } catch {
-    // sessionStorage不可の環境では無視（印刷フロー継続は不可になるが致命的ではない）
+    // ストレージ不可の環境では無視（印刷フロー継続は不可になるが致命的ではない）
   }
 }
 
 export function loadSavedResultForReceipt(): ReceiptCheckResult | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.sessionStorage.getItem(RECEIPT_RESULT_STORAGE_KEY);
+    const raw = window.localStorage.getItem(RECEIPT_RESULT_STORAGE_KEY);
     return raw ? (JSON.parse(raw) as ReceiptCheckResult) : null;
   } catch {
     return null;
@@ -106,7 +108,7 @@ export function loadSavedResultForReceipt(): ReceiptCheckResult | null {
 
 export function clearSavedResultForReceipt(): void {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.removeItem(RECEIPT_RESULT_STORAGE_KEY);
+  window.localStorage.removeItem(RECEIPT_RESULT_STORAGE_KEY);
 }
 
 // ============================================================
