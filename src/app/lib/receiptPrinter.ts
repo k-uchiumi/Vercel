@@ -88,16 +88,18 @@ export function isPosModeEnabled(): boolean {
 export function saveResultForReceipt(result: ReceiptCheckResult): void {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(RECEIPT_RESULT_STORAGE_KEY, JSON.stringify(result));
+    // sessionStorageはSII URL Print Agent経由でブラウザに戻った際に
+    // タブ/セッションが引き継がれず消えることがあるため、localStorageを使用する。
+    window.localStorage.setItem(RECEIPT_RESULT_STORAGE_KEY, JSON.stringify(result));
   } catch {
-    // sessionStorage不可の環境では無視（印刷フロー継続は不可になるが致命的ではない）
+    // ストレージ不可の環境では無視（印刷フロー継続は不可になるが致命的ではない）
   }
 }
 
 export function loadSavedResultForReceipt(): ReceiptCheckResult | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.sessionStorage.getItem(RECEIPT_RESULT_STORAGE_KEY);
+    const raw = window.localStorage.getItem(RECEIPT_RESULT_STORAGE_KEY);
     return raw ? (JSON.parse(raw) as ReceiptCheckResult) : null;
   } catch {
     return null;
@@ -106,7 +108,7 @@ export function loadSavedResultForReceipt(): ReceiptCheckResult | null {
 
 export function clearSavedResultForReceipt(): void {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.removeItem(RECEIPT_RESULT_STORAGE_KEY);
+  window.localStorage.removeItem(RECEIPT_RESULT_STORAGE_KEY);
 }
 
 // ============================================================
@@ -341,7 +343,12 @@ function ensureReceiptFontLoaded(): Promise<void> {
 // Canvas描画
 // ============================================================
 
-function pickFontSizePx(ctx: CanvasRenderingContext2D, fontFamily: string, targetWidthPx: number): number {
+function pickFontSizePx(
+  ctx: CanvasRenderingContext2D,
+  fontFamily: string,
+  targetWidthPx: number,
+  sampleLines: string[]
+): number {
   const testStr = 'あ'.repeat(GRID_COLS / 2); // 全角16文字 = 32ユニット相当のテスト文字列
   let fontSize = 22;
   ctx.font = `${fontSize}px "${fontFamily}", ${RECEIPT_FONT_FALLBACK}`;
@@ -349,20 +356,37 @@ function pickFontSizePx(ctx: CanvasRenderingContext2D, fontFamily: string, targe
   if (measured > 0) {
     fontSize = Math.floor(fontSize * (targetWidthPx / measured));
   }
-  return Math.max(10, Math.min(fontSize, 28));
+  fontSize = Math.max(10, Math.min(fontSize, 28));
+
+  // 全角文字のみの較正だと、半角カナ・濁点付き文字を含む実際の行で
+  // 実測幅がズレて右端がはみ出すことがあるため、実際の行内容で再検証して縮小する。
+  for (let iter = 0; iter < 6; iter++) {
+    ctx.font = `${fontSize}px "${fontFamily}", ${RECEIPT_FONT_FALLBACK}`;
+    let maxLineWidth = 0;
+    for (const line of sampleLines) {
+      const w = ctx.measureText(line).width;
+      if (w > maxLineWidth) maxLineWidth = w;
+    }
+    if (maxLineWidth <= targetWidthPx || fontSize <= 10) break;
+    const shrunk = Math.floor(fontSize * (targetWidthPx / maxLineWidth)) - 1;
+    fontSize = Math.max(10, shrunk);
+  }
+
+  return fontSize;
 }
 
 async function renderLinesToCanvas(lines: ReceiptLine[]): Promise<HTMLCanvasElement> {
   await ensureReceiptFontLoaded();
 
-  const marginX = 8;
+  const marginX = 12; // 半角カナ等の実測幅ズレに備えた安全マージン(旧8pxから拡大)
   const marginY = 16;
   const usableWidth = CANVAS_WIDTH_PX - marginX * 2;
 
   // フォントサイズ決定用の一時canvas
   const measureCanvas = document.createElement('canvas');
   const measureCtx = measureCanvas.getContext('2d')!;
-  const fontSizePx = pickFontSizePx(measureCtx, RECEIPT_FONT_FAMILY, usableWidth);
+  const textLines = lines.filter((l): l is { type: 'text'; text: string } => l.type === 'text').map((l) => l.text);
+  const fontSizePx = pickFontSizePx(measureCtx, RECEIPT_FONT_FAMILY, usableWidth, textLines);
   const lineHeightPx = Math.round(fontSizePx * 1.4);
 
   // QR画像を事前生成（サイズを高さ計算に反映するため）
