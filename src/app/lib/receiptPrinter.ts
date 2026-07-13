@@ -378,7 +378,7 @@ function pickFontSizePx(
 async function renderLinesToCanvas(lines: ReceiptLine[]): Promise<HTMLCanvasElement> {
   await ensureReceiptFontLoaded();
 
-  const marginX = 9; // 半角カナ等の実測幅ズレに備えた安全マージン(旧8pxから微増。12だと縮小しすぎたため調整)
+  const marginX = 8; // 最初のバージョンと同じマージン。はみ出し対策は下の実測シュリンクに任せる
   const marginY = 16;
   const usableWidth = CANVAS_WIDTH_PX - marginX * 2;
 
