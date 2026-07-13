@@ -24,10 +24,10 @@ interface CheckResult {
     has_como_v2: boolean;
     visited_url: string;
     capi_data?: {
-      meta: { is_detected: boolean; has_event_id: boolean; has_fbp_fbc: boolean };
-      google: { is_detected: boolean; has_gcl_au: boolean; has_custom_domain: boolean; has_enhanced: boolean };
+      meta: { is_detected: boolean; has_fbp_fbc: boolean };
+      google: { is_detected: boolean; has_custom_domain: boolean };
       tiktok: { is_detected: boolean; has_external_id: boolean; has_event_id: boolean };
-      line: { is_detected: boolean; has_ifa_cl_id: boolean; has_line_id: boolean };
+      line: { is_detected: boolean };
     };
   };
 }
@@ -39,6 +39,9 @@ declare global {
     };
   }
 }
+
+// 静的解析では原理的に確認できない項目に対する共通表示（3値表示のうち「➖ 判定対象外」）
+const NOT_APPLICABLE_NOTE = '➖ 判定対象外（詳細診断で確認可能）';
 
 export default function Home() {
   const [url, setUrl] = useState('');
@@ -179,18 +182,18 @@ export default function Home() {
                   {result.details.is_sgtm || result.details.has_obfuscated_loader ? '検出 (sGTM/等)' : '未検出'}
                 </div>
                 {result.details.has_obfuscated_loader && (
-                    <div style={{ fontSize: '0.75rem', color: 'var(--warning)', marginTop: '0.5rem', lineHeight: '1.4' }}>
-                        ⚠️ カスタムローダー検知: 独自ドメイン経由等でタグが高度に隠蔽・配信されている可能性があります（IDの一部が抽出できない場合があります）
-                      <div className={styles.detailItem}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--warning)', marginTop: '0.5rem', lineHeight: '1.4' }}>
+                    ⚠️ カスタムローダー検知: 独自ドメイン経由等でタグが高度に隠蔽・配信されている可能性があります（IDの一部が抽出できない場合があります）
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.detailItem}>
                 <div className={styles.detailLabel}>CMP (同意管理ツール)</div>
                 <div className={`${styles.detailValue} ${result.details.has_cmp ? styles.success : styles.error}`}>
                   {result.details.has_cmp ? '検出' : '未検出'}
                 </div>
                 {!result.details.has_cmp && result.details.has_como_v2 && <div style={{ fontSize: '0.7rem', color: 'var(--warning)', marginTop: '0.3rem' }}>※CMP未実装の可能性</div>}
-              </div>
-
-            </div>
-                )}
               </div>
 
               <div className={styles.detailItem}>
@@ -215,7 +218,7 @@ export default function Home() {
                     <div className={`${styles.detailValue} ${result.details.capi_data.meta.is_detected ? styles.success : styles.error}`}>
                       {result.details.capi_data.meta.is_detected ? '導入の可能性大' : '未検出'}
                     </div>
-                    {result.details.capi_data.meta.has_event_id && <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>Event ID 検出済</div>}
+                    <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>Event ID: {NOT_APPLICABLE_NOTE}</div>
                   </div>
                   <div className={styles.detailItem}>
                     <div className={styles.detailLabel}>Google 広告</div>
@@ -223,6 +226,7 @@ export default function Home() {
                       {result.details.capi_data.google.is_detected ? '導入の可能性大' : '未検出'}
                     </div>
                     {result.details.capi_data.google.has_custom_domain && <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>計測用独自ドメイン検出済</div>}
+                    <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>_gcl_au / gclid / 拡張コンバージョン: {NOT_APPLICABLE_NOTE}</div>
                   </div>
                   <div className={styles.detailItem}>
                     <div className={styles.detailLabel}>TikTok</div>
@@ -231,10 +235,11 @@ export default function Home() {
                     </div>
                   </div>
                   <div className={styles.detailItem}>
-                    <div className={styles.detailLabel}>LINE 広告</div>
+                    <div className={styles.detailLabel}>LINE Tag</div>
                     <div className={`${styles.detailValue} ${result.details.capi_data.line.is_detected ? styles.success : styles.error}`}>
-                      {result.details.capi_data.line.is_detected ? '導入の可能性大' : '未検出'}
+                      {result.details.capi_data.line.is_detected ? 'LINE Tag検出' : '未検出'}
                     </div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>IFA連携（CAPI相当）: {NOT_APPLICABLE_NOTE}</div>
                   </div>
                 </div>
               </div>

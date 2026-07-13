@@ -350,17 +350,26 @@ export async function POST(request: Request) {
             const ga4IdsFromContainers: string[] = [];
             const uaIdsFromContainers: string[] = [];
 
+            // --- LINE Tag (ltag.js) Detection Patterns ---
+            // Verified 2026-07 against LINE Yahoo for Business official docs / base code:
+            // - Base code script is delivered from https://d.line-scdn.net (or http://d.line-cdn.net)
+            //   at path /n/line_tag/public/release/v1/lt.js
+            // - Initialization call is _lt('init', { tagId: '<uuid>' })
+            // - tagId follows UUID format (8-4-4-4-12 hex)
+            const lineTagScriptRegex = /https?:\/\/d\.line-(?:scdn|cdn)\.net\/n\/line_tag\//i;
+            const lineTagInitRegex = /_lt\(\s*['"]init['"]/;
+            const lineTagIdRegex = /tagId\s*:\s*['"][0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}['"]/;
+            const isLineTagPresent = (text: string) =>
+                lineTagScriptRegex.test(text) || lineTagInitRegex.test(text) || lineTagIdRegex.test(text);
+
             // --- 1st Party Data Sender (CAPI) Detection ---
             const capiData = {
                 meta: {
-                    has_event_id: false,
                     has_fbp_fbc: html.includes('_fbp') || html.includes('_fbc'),
                     is_detected: false
                 },
                 google: {
-                    has_gcl_au: false,
                     has_custom_domain: false,
-                    has_enhanced: html.includes('hashed_email'),
                     is_detected: false
                 },
                 tiktok: {
@@ -369,9 +378,7 @@ export async function POST(request: Request) {
                     is_detected: false
                 },
                 line: {
-                    has_ifa_cl_id: html.includes('ifa') || html.includes('cl_id'),
-                    has_line_id: html.includes('_line_id'),
-                    is_detected: false
+                    is_detected: isLineTagPresent(html)
                 }
             };
 
@@ -400,12 +407,9 @@ export async function POST(request: Request) {
 
                         // CAPI Signals in GTM (Strict matching)
                         if (gtmJs.includes('_fbp') || gtmJs.includes('_fbc')) capiData.meta.has_fbp_fbc = true;
-                        if (gtmJs.includes('hashed_email')) capiData.google.has_enhanced = true;
                         if (gtmJs.includes('external_id')) capiData.tiktok.has_external_id = true;
                         if (gtmJs.includes('tt_pixel_id')) capiData.tiktok.has_event_id = true;
-                        if (gtmJs.includes('ifa') || gtmJs.includes('cl_id')) capiData.line.has_ifa_cl_id = true;
-                        if (gtmJs.includes('_line_id')) capiData.line.has_line_id = true;
-                        if (gtmJs.includes('_line_id')) capiData.line.has_line_id = true;
+                        if (isLineTagPresent(gtmJs)) capiData.line.is_detected = true;
 
                         // sGTM detect: only flag has_custom_domain if server_container_url or /g/collect
                         // explicitly points to a subdomain of the site's root domain
@@ -432,7 +436,7 @@ export async function POST(request: Request) {
                         }
                     }
                 } catch (e) { }
-                if (containerSignalsFound && capiData.meta.has_event_id && capiData.tiktok.has_event_id) break;
+                if (containerSignalsFound && capiData.tiktok.has_event_id) break;
             }
 
             // --- Deep Scan for GA4 Scripts (gtag.js) ---
@@ -454,10 +458,10 @@ export async function POST(request: Request) {
                     }
                 } catch (e) {}
             }
-            capiData.meta.is_detected = capiData.meta.has_event_id || (capiData.meta.has_fbp_fbc && containerSignalsFound);
-            capiData.google.is_detected = capiData.google.has_custom_domain || (capiData.google.has_gcl_au && capiData.google.has_enhanced);
+            capiData.meta.is_detected = capiData.meta.has_fbp_fbc && containerSignalsFound;
+            capiData.google.is_detected = capiData.google.has_custom_domain;
             capiData.tiktok.is_detected = capiData.tiktok.has_event_id || capiData.tiktok.has_external_id;
-            capiData.line.is_detected = capiData.line.has_ifa_cl_id || capiData.line.has_line_id;
+            // capiData.line.is_detected is already set via isLineTagPresent() above
 
             // --- Decision Logic ---
             const hasGa4Direct = ga4MatchesHtml.length > 0;
