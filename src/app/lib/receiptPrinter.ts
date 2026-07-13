@@ -22,7 +22,7 @@
 
 const CANVAS_WIDTH_PX = 384; // MP-B20 ドット構成(dots/line)と1:1
 const DOTS_PER_MM = 8; // MP-B20 ドット密度
-const GRID_COLS = 32; // 半角32桁 / 全角16文字 グリッド
+const GRID_COLS = 28; // 半角28桁 / 全角14文字 グリッド（旧32から縮小し、その分フォントを拡大）
 const PDF_SIZE_WARN_BYTES = 150 * 1024; // Android向けPDFサイズ上限目安（Base64化前）
 
 const RECEIPT_FONT_FAMILY = 'BIZ UDGothic';
@@ -148,11 +148,12 @@ function centerUnits(str: string, target: number = GRID_COLS): string {
 }
 
 function itemLine(name: string, qty: string, amount: string): string {
-  // 品名24 + 数量3 + 金額5 = 32
-  return padEndUnits(name, 24) + padStartUnits(qty, 3) + padStartUnits(amount, 5);
+  // 品名21 + 数量2 + 金額5 = 28（旧24+3+5=32から、実際の品名長に合わせて詰めた）
+  return padEndUnits(name, 21) + padStartUnits(qty, 2) + padStartUnits(amount, 5);
 }
 
-function amountLine(label: string, amount: string, amountCol = 10): string {
+function amountLine(label: string, amount: string, amountCol = 6): string {
+  // 金額欄は既定6ユニット（¥0等の短い値向け）。マイル行など桁数が多い行だけ個別にamountColを大きく指定する。
   return padEndUnits(label, GRID_COLS - amountCol) + padStartUnits(amount, amountCol);
 }
 
@@ -266,8 +267,8 @@ export function buildReceiptLines(result: ReceiptCheckResult): ReceiptLine[] {
     amountLine('お釣り   (笑顔)', '¥0'),
     RULE_THICK,
     centerUnits('[ mare interno 会員マイル ]'),
-    amountLine('今回付与ﾏｲﾙ', `+${miles} Mile`),
-    amountLine('現在の累計ﾏｲﾙ', `${miles} Mile`),
+    amountLine('今回付与ﾏｲﾙ', `+${miles} Mile`, 10), // "+125 Mile"想定で余裕を持たせる
+    amountLine('現在の累計ﾏｲﾙ', `${miles} Mile`, 10),
     RULE_THIN,
     centerUnits('お買い上げありがとうございました'),
     centerUnits('またのご来店をお待ちしております'),
@@ -343,12 +344,7 @@ function ensureReceiptFontLoaded(): Promise<void> {
 // Canvas描画
 // ============================================================
 
-function pickFontSizePx(
-  ctx: CanvasRenderingContext2D,
-  fontFamily: string,
-  targetWidthPx: number,
-  sampleLines: string[]
-): number {
+function pickFontSizePx(ctx: CanvasRenderingContext2D, fontFamily: string, targetWidthPx: number): number {
   const testStr = 'あ'.repeat(GRID_COLS / 2); // 全角16文字 = 32ユニット相当のテスト文字列
   let fontSize = 22;
   ctx.font = `${fontSize}px "${fontFamily}", ${RECEIPT_FONT_FALLBACK}`;
@@ -356,23 +352,30 @@ function pickFontSizePx(
   if (measured > 0) {
     fontSize = Math.floor(fontSize * (targetWidthPx / measured));
   }
-  fontSize = Math.max(10, Math.min(fontSize, 28));
+  return Math.max(10, Math.min(fontSize, 28));
+}
 
-  // 全角文字のみの較正だと、半角カナ・濁点付き文字を含む実際の行で
-  // 実測幅がズレて右端がはみ出すことがあるため、実際の行内容で再検証して縮小する。
-  for (let iter = 0; iter < 6; iter++) {
-    ctx.font = `${fontSize}px "${fontFamily}", ${RECEIPT_FONT_FALLBACK}`;
-    let maxLineWidth = 0;
-    for (const line of sampleLines) {
-      const w = ctx.measureText(line).width;
-      if (w > maxLineWidth) maxLineWidth = w;
-    }
-    if (maxLineWidth <= targetWidthPx || fontSize <= 10) break;
-    const shrunk = Math.floor(fontSize * (targetWidthPx / maxLineWidth));
-    fontSize = Math.max(10, shrunk);
+// 全角文字だけの文字列で較正したフォントサイズだと、半角カナ・濁点付き文字が混ざる
+// 実際の行では実測幅がズレて右端がはみ出すことがある。
+// → 全体のフォントサイズは一律で下げず、はみ出す行だけを描画時に横方向のみ圧縮する
+//   （文字の高さ＝読みやすさは保ったまま、幅だけをその行限定で詰める）。
+function drawLineFitted(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  marginX: number,
+  y: number,
+  usableWidth: number
+): void {
+  const naturalWidth = ctx.measureText(text).width;
+  if (naturalWidth > usableWidth && naturalWidth > 0) {
+    const scaleX = usableWidth / naturalWidth;
+    ctx.save();
+    ctx.scale(scaleX, 1);
+    ctx.fillText(text, marginX / scaleX, y);
+    ctx.restore();
+  } else {
+    ctx.fillText(text, marginX, y);
   }
-
-  return fontSize;
 }
 
 async function renderLinesToCanvas(lines: ReceiptLine[]): Promise<HTMLCanvasElement> {
@@ -385,8 +388,7 @@ async function renderLinesToCanvas(lines: ReceiptLine[]): Promise<HTMLCanvasElem
   // フォントサイズ決定用の一時canvas
   const measureCanvas = document.createElement('canvas');
   const measureCtx = measureCanvas.getContext('2d')!;
-  const textLines = lines.filter((l): l is { type: 'text'; text: string } => l.type === 'text').map((l) => l.text);
-  const fontSizePx = pickFontSizePx(measureCtx, RECEIPT_FONT_FAMILY, usableWidth, textLines);
+  const fontSizePx = pickFontSizePx(measureCtx, RECEIPT_FONT_FAMILY, usableWidth);
   const lineHeightPx = Math.round(fontSizePx * 1.4);
 
   // QR画像を事前生成（サイズを高さ計算に反映するため）
@@ -432,7 +434,7 @@ async function renderLinesToCanvas(lines: ReceiptLine[]): Promise<HTMLCanvasElem
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.type === 'text') {
-      ctx.fillText(line.text, marginX, y);
+      drawLineFitted(ctx, line.text, marginX, y, usableWidth);
       y += lineHeightPx;
     } else {
       const qrCanvas = qrCanvases.get(i)!;
