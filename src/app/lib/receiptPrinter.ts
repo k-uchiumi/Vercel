@@ -22,7 +22,7 @@
 
 const CANVAS_WIDTH_PX = 384; // MP-B20 ドット構成(dots/line)と1:1
 const DOTS_PER_MM = 8; // MP-B20 ドット密度
-const GRID_COLS = 32; // 半角32桁 / 全角16文字 グリッド
+const GRID_COLS = 28; // 半角28桁 / 全角14文字 グリッド（旧32から縮小し、その分フォントを拡大）
 const PDF_SIZE_WARN_BYTES = 150 * 1024; // Android向けPDFサイズ上限目安（Base64化前）
 
 const RECEIPT_FONT_FAMILY = 'BIZ UDGothic';
@@ -148,11 +148,12 @@ function centerUnits(str: string, target: number = GRID_COLS): string {
 }
 
 function itemLine(name: string, qty: string, amount: string): string {
-  // 品名24 + 数量3 + 金額5 = 32
-  return padEndUnits(name, 24) + padStartUnits(qty, 3) + padStartUnits(amount, 5);
+  // 品名21 + 数量2 + 金額5 = 28（旧24+3+5=32から、実際の品名長に合わせて詰めた）
+  return padEndUnits(name, 21) + padStartUnits(qty, 2) + padStartUnits(amount, 5);
 }
 
-function amountLine(label: string, amount: string, amountCol = 10): string {
+function amountLine(label: string, amount: string, amountCol = 6): string {
+  // 金額欄は既定6ユニット（¥0等の短い値向け）。マイル行など桁数が多い行だけ個別にamountColを大きく指定する。
   return padEndUnits(label, GRID_COLS - amountCol) + padStartUnits(amount, amountCol);
 }
 
@@ -266,8 +267,8 @@ export function buildReceiptLines(result: ReceiptCheckResult): ReceiptLine[] {
     amountLine('お釣り   (笑顔)', '¥0'),
     RULE_THICK,
     centerUnits('[ mare interno 会員マイル ]'),
-    amountLine('今回付与ﾏｲﾙ', `+${miles} Mile`),
-    amountLine('現在の累計ﾏｲﾙ', `${miles} Mile`),
+    amountLine('今回付与ﾏｲﾙ', `+${miles} Mile`, 10), // "+125 Mile"想定で余裕を持たせる
+    amountLine('現在の累計ﾏｲﾙ', `${miles} Mile`, 10),
     RULE_THIN,
     centerUnits('お買い上げありがとうございました'),
     centerUnits('またのご来店をお待ちしております'),
