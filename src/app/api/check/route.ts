@@ -333,7 +333,8 @@ export async function POST(request: Request) {
 
             // --- CMP (Consent Management Platform) Detection ---
             const cmpPatterns = [
-                'cdn.cookieyes.com',
+                'cdn-cookieyes.com',   // CookieYes (current script domain per official docs)
+                'cdn.cookieyes.com',   // CookieYes (legacy/alternate domain, kept for backward compat)
                 'cdn.cookielaw.org',   // OneTrust
                 'consent.cookiebot.com',
                 'app.termly.io',
@@ -477,7 +478,7 @@ export async function POST(request: Request) {
             let score = 2;
             let statusMessage = "GA4の導入が検出されませんでした。";
 
-            if (isSgtm) {
+            if (isSgtm || hasObfuscatedLoader) {
                 score = 4;
                 statusMessage = "高度な/サーバーサイド実装（sGTM / Google Tag Gateway）が検出されました。計測欠損が最小限に抑えられている可能性があります。";
             } else if (hasGa4Direct || hasGa4Gtm || hasGtm) {
