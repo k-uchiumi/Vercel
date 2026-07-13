@@ -1,7 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import styles from './page.module.css';
+import {
+  syncPosModeFromQuery,
+  saveResultForReceipt,
+  loadSavedResultForReceipt,
+  buildReceiptPrintUrl,
+  buildCouponPrintUrl,
+  firePrint,
+} from './lib/receiptPrinter';
 
 interface CheckResult {
   score: number;
@@ -49,6 +57,77 @@ export default function Home() {
   const [result, setResult] = useState<CheckResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [zarazTriggered, setZarazTriggered] = useState(false);
+
+  // --- POSレジ打ちレシート印刷（交流会限定機能） ---
+  const [posMode, setPosMode] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [couponFallbackUrl, setCouponFallbackUrl] = useState<string | null>(null);
+  const [printError, setPrintError] = useState<{ stage: 'receipt' | 'coupon'; message: string | null } | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setPosMode(syncPosModeFromQuery(params));
+
+    const printParam = params.get('print');
+    const printFail = params.get('printfail');
+
+    if (printParam === 'coupon') {
+      const saved = loadSavedResultForReceipt();
+      window.history.replaceState({}, '', window.location.pathname);
+      if (saved) {
+        setResult(saved as CheckResult);
+        void handleCouponAutoFire(saved as CheckResult);
+      }
+    } else if (printFail === 'receipt' || printFail === 'coupon') {
+      const saved = loadSavedResultForReceipt();
+      window.history.replaceState({}, '', window.location.pathname);
+      if (saved) setResult(saved as CheckResult);
+      setPrintError({ stage: printFail, message: params.get('message') });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCouponAutoFire = async (r: CheckResult) => {
+    try {
+      const origin = window.location.origin + window.location.pathname;
+      const url = await buildCouponPrintUrl(origin, `${origin}?printfail=coupon`);
+      setCouponFallbackUrl(url);
+      // まずユーザー操作なしの自動発火を試す。Android Chromeのジェスチャー制約でブロックされる場合は
+      // 下記UIの「クーポン発券」ボタン（couponFallbackUrlを使用）がフォールバックになる。
+      firePrint(url);
+    } catch (e) {
+      console.error(e);
+      setPrintError({ stage: 'coupon', message: 'クーポンの生成に失敗しました。' });
+    }
+  };
+
+  const handlePrintReceipt = async () => {
+    if (!result) return;
+    setPrinting(true);
+    setPrintError(null);
+    setCouponFallbackUrl(null);
+    try {
+      saveResultForReceipt(result);
+      const origin = window.location.origin + window.location.pathname;
+      const url = await buildReceiptPrintUrl(result, `${origin}?print=coupon`, `${origin}?printfail=receipt`);
+      firePrint(url);
+    } catch (e) {
+      console.error(e);
+      setPrintError({ stage: 'receipt', message: '印刷データの生成に失敗しました。' });
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const handleReprint = () => {
+    const stage = printError?.stage;
+    setPrintError(null);
+    if (stage === 'coupon' && result) {
+      void handleCouponAutoFire(result);
+    } else {
+      void handlePrintReceipt();
+    }
+  };
 
   const handleInput = () => {
     if (!zarazTriggered && url.length === 0) {
@@ -266,6 +345,41 @@ export default function Home() {
             <a href="https://mareinterno.com/inquiry/" target="_blank" rel="noopener noreferrer" className={styles.contactButton}>
               詳細を確認したい場合はこちら
             </a>
+
+            {posMode && (
+              <button
+                type="button"
+                onClick={handlePrintReceipt}
+                disabled={printing}
+                className={styles.contactButton}
+                style={{ marginTop: '1rem', background: 'var(--warning)', color: '#1a1a1a', border: 'none', width: '100%', cursor: printing ? 'not-allowed' : 'pointer' }}
+              >
+                {printing ? '印刷データ生成中...' : '🖨️ レジ打ち'}
+              </button>
+            )}
+
+            {couponFallbackUrl && (
+              <button
+                type="button"
+                onClick={() => firePrint(couponFallbackUrl)}
+                className={styles.contactButton}
+                style={{ marginTop: '1rem', background: 'var(--secondary)', color: '#fff', border: 'none', width: '100%' }}
+              >
+                🎟️ クーポン発券
+              </button>
+            )}
+
+            {printError && (
+              <div style={{ marginTop: '1rem', padding: '1rem', borderRadius: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', textAlign: 'center' }}>
+                <p style={{ color: 'var(--error)', marginBottom: '0.75rem', fontSize: '0.9rem' }}>
+                  {printError.stage === 'coupon' ? 'クーポン券の印刷に失敗しました。' : 'レシートの印刷に失敗しました。'}
+                  {printError.message ? ` (${printError.message})` : ''}
+                </p>
+                <button type="button" onClick={handleReprint} className={styles.contactButton} style={{ marginTop: 0 }}>
+                  再印刷
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
