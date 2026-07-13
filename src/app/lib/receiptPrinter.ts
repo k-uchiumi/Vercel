@@ -368,7 +368,7 @@ function pickFontSizePx(
       if (w > maxLineWidth) maxLineWidth = w;
     }
     if (maxLineWidth <= targetWidthPx || fontSize <= 10) break;
-    const shrunk = Math.floor(fontSize * (targetWidthPx / maxLineWidth)) - 1;
+    const shrunk = Math.floor(fontSize * (targetWidthPx / maxLineWidth));
     fontSize = Math.max(10, shrunk);
   }
 
@@ -378,7 +378,7 @@ function pickFontSizePx(
 async function renderLinesToCanvas(lines: ReceiptLine[]): Promise<HTMLCanvasElement> {
   await ensureReceiptFontLoaded();
 
-  const marginX = 12; // 半角カナ等の実測幅ズレに備えた安全マージン(旧8pxから拡大)
+  const marginX = 9; // 半角カナ等の実測幅ズレに備えた安全マージン(旧8pxから微増。12だと縮小しすぎたため調整)
   const marginY = 16;
   const usableWidth = CANVAS_WIDTH_PX - marginX * 2;
 
