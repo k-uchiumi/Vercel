@@ -33,8 +33,7 @@ const RECEIPT_FONT_CSS_URL =
 const POS_MODE_STORAGE_KEY = 'check_mareinterno_pos_mode';
 const RECEIPT_RESULT_STORAGE_KEY = 'check_mareinterno_receipt_result';
 
-const COUPON_INQUIRY_URL =
-  'https://mareinterno.com/inquiry/?utm_source=receipt&utm_medium=offline&utm_campaign=20260715_kouryukai';
+const COUPON_LINE_URL = 'https://line.me/R/ti/p/@884mjvoo';
 
 // ============================================================
 // 診断結果 → レシート入力の最小インターフェース
@@ -291,9 +290,10 @@ export function buildCouponLines(): ReceiptLine[] {
     { type: 'text', text: '｢詳細Web診断&改善ﾛｰﾄﾞﾏｯﾌﾟ提案｣' },
     { type: 'text', text: 'を無料でご利用いただけます｡' },
     { type: 'text', text: '' },
-    { type: 'text', text: centerUnits('▼ご予約･お問い合わせはQRから▼') },
+    { type: 'text', text: centerUnits('▼LINEでお友達登録▼') },
+    { type: 'text', text: centerUnits('LINEで相談・ご予約はこちら') },
     { type: 'text', text: '' },
-    { type: 'qr', data: COUPON_INQUIRY_URL, sizePx: 160 },
+    { type: 'qr', data: COUPON_LINE_URL, sizePx: 160 },
     { type: 'text', text: '' },
     { type: 'text', text: '※本券は有効期限なし' },
     { type: 'text', text: '　レシートをお持ちの方有効' },
