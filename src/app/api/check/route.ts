@@ -530,7 +530,7 @@ export async function POST(request: Request) {
                         has_cmp: hasCmp,
                         is_como_misconfigured: isComoMisconfigured,
                         has_como_v2: hasComoV2,
-                        capi_data: capiData
+                        capi_data: capiData,
                         logic_version: 3
                     });
 
@@ -565,7 +565,8 @@ export async function POST(request: Request) {
                     is_como_misconfigured: isComoMisconfigured,
                     has_como_v2: hasComoV2,
                     visited_url: targetUrl,
-                    capi_data: capiData
+                    capi_data: capiData,
+                    logic_version: 3
                 },
                 message: statusMessage
             });
