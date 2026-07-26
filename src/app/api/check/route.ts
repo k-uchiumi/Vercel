@@ -206,7 +206,7 @@ export async function POST(request: Request) {
                     } catch (e) { console.error('Failed to parse cached details', e); }
 
                     // Cache Invalidation for new fields (CoMo v2, All IDs, Obfuscation, CMP)
-                    if (details.has_como_v2 === undefined || details.all_ga4_ids === undefined || details.has_obfuscated_loader === undefined || details.has_cmp === undefined) {
+                    if (details.has_como_v2 === undefined || details.all_ga4_ids === undefined || details.has_obfuscated_loader === undefined || details.has_cmp === undefined || details.logic_version === undefined) {
                         console.log('Cache Invalidation: Missing new fields including has_cmp');
                     } else {
                         // Intelligent column detection due to misalignment history
@@ -325,12 +325,16 @@ export async function POST(request: Request) {
             // Example: <script src="https://custom.domain.com/js?id=GTM-XXXXX"></script> where domain is NOT googletagmanager.com
             const customLoaderRegex = /src=["']https?:\/\/(?!www\.googletagmanager\.com)[^"']+\/(gtm\.js|js\?id=|gtag\/js)/i;
             const hasCustomLoaderScript = customLoaderRegex.test(html);
+
+            // 公式googletagmanager.comからのgtag.js配信があれば、dataLayerの存在は説明が付く
+            // （GTM不使用・gtag.js単体実装との構造的な誤検知を避けるための除外条件。第3弾修正）
+            const hasOfficialGtag = /googletagmanager\.com\/gtag\/js/i.test(html);
             
             // If dataLayer is initialized but no standard GTM ID is found directly, or if specific patterns match
-            if (hasStape || hasCustomLoaderScript || (hasDataLayerInit && uniqueGtmIds.length === 0)) {
+            if (hasStape || hasCustomLoaderScript || (hasDataLayerInit && uniqueGtmIds.length === 0 && !hasOfficialGtag)) {
                 hasObfuscatedLoader = true;
             }
-
+          
             // --- CMP (Consent Management Platform) Detection ---
             const cmpPatterns = [
                 'cdn-cookieyes.com',   // CookieYes (current script domain per official docs)
@@ -478,7 +482,7 @@ export async function POST(request: Request) {
             let score = 2;
             let statusMessage = "GA4の導入が検出されませんでした。";
 
-            if (isSgtm || hasObfuscatedLoader) {
+            if (isSgtm) {
                 score = 4;
                 statusMessage = "高度な/サーバーサイド実装（sGTM / Google Tag Gateway）が検出されました。計測欠損が最小限に抑えられている可能性があります。";
             } else if (hasGa4Direct || hasGa4Gtm || hasGtm) {
@@ -527,6 +531,7 @@ export async function POST(request: Request) {
                         is_como_misconfigured: isComoMisconfigured,
                         has_como_v2: hasComoV2,
                         capi_data: capiData
+                        logic_version: 3
                     });
 
                     await appendSpreadsheetValues(
