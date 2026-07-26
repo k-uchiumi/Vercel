@@ -262,9 +262,9 @@ export default function Home() {
                 <div className={`${styles.detailValue} ${result.details.is_sgtm || result.details.has_obfuscated_loader ? styles.success : styles.error}`}>
                   {result.details.is_sgtm || result.details.has_obfuscated_loader ? '検出 (sGTM/等)' : '未検出'}
                 </div>
-                {result.details.has_obfuscated_loader && (
+                {result.details.has_obfuscated_loader && !result.details.is_sgtm && (
                   <div style={{ fontSize: '0.75rem', color: 'var(--warning)', marginTop: '0.5rem', lineHeight: '1.4' }}>
-                    ⚠️ カスタムローダー検知: 独自ドメイン経由等でタグが高度に隠蔽・配信されている可能性があります（IDの一部が抽出できない場合があります）
+                    ⚠️ 独自ローダーの可能性を検知。sGTMかどうかは静的解析では断定できません（{NOT_APPLICABLE_NOTE}）
                   </div>
                 )}
               </div>
