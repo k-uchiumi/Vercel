@@ -36,7 +36,7 @@ interface CheckResult {
       meta: { is_detected: boolean; has_fbp_fbc: boolean };
       google: { is_detected: boolean; has_custom_domain: boolean };
       tiktok: { is_detected: boolean; has_external_id: boolean; has_event_id: boolean };
-      line: { is_detected: boolean };
+      line: { is_detected: boolean; tag_detected?: boolean };
     };
   };
 }
@@ -317,8 +317,8 @@ export default function Home() {
                   </div>
                   <div className={styles.detailItem}>
                     <div className={styles.detailLabel}>LINE Tag</div>
-                    <div className={`${styles.detailValue} ${result.details.capi_data.line.is_detected ? styles.success : styles.error}`}>
-                      {result.details.capi_data.line.is_detected ? 'LINE Tag検出' : '未検出'}
+                    <div className={`${styles.detailValue} ${(result.details.capi_data.line.tag_detected ?? result.details.capi_data.line.is_detected) ? styles.success : styles.error}`}>
+                      {(result.details.capi_data.line.tag_detected ?? result.details.capi_data.line.is_detected) ? 'LINE Tag検出' : '未検出'}
                     </div>
                     <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.3rem' }}>IFA連携（CAPI相当）: {NOT_APPLICABLE_NOTE}</div>
                   </div>
