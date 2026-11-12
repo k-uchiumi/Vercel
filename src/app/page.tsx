@@ -344,6 +344,14 @@ export default function Home() {
               )}
             </div>
 
+            <p style={{ marginTop: '1.5rem', textAlign: 'center', fontSize: '0.9rem', lineHeight: 1.7 }}>
+              人の目でも見てほしい方へ。URLをお送りいただければ、内海が確認して、簡単なレポートをお返しします。
+              <br />
+              <a href="https://mareinterno.com/measurement-survey/" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'underline' }}>
+                簡易レポートを依頼する
+              </a>
+            </p>
+
             <a href="https://mareinterno.com/inquiry/" target="_blank" rel="noopener noreferrer" className={styles.contactButton}>
               詳細を確認したい場合はこちら
             </a>
